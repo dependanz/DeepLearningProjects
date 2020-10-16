@@ -4,15 +4,16 @@ from RLProjects.NEAT import Gene, Genome, InnovationManager, connection_mutation
 genome = Genome(3, 1)
 innovationManager = InnovationManager()
 
-genome.add_gene(0, 3, innovationManager)
+connection_mutation(genome,innovationManager)
 
-print(genome)
+#print(genome)
 
 connection_mutation(genome,innovationManager)
 
-print(genome)
+#print(genome)
 
 for i in range(3):
     connection_mutation(genome,innovationManager)
 
-print(genome)
+
+#print(genome)

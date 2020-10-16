@@ -1,5 +1,5 @@
 import random
-
+import math
 '''
   Connection Gene Class
 '''
@@ -56,8 +56,6 @@ class Genome:
         for j in range(n_x, n_x + n_y):
             self.node_genes[j] = 2
 
-        print(len(self.node_genes))
-
     def add_gene(self, input, output, innovation_manager):
         i_n = len(innovation_manager.innovation_numbers)
         g = Gene(input, output, True, i_n)
@@ -110,14 +108,22 @@ def connection_mutation(genome, innovation_manager):
     node_genes = genome.node_genes
     in_node = random.randint(0, len(node_genes)-1)
     out_node = random.randint(0, len(node_genes)-1)
-    print(in_node,out_node)
-    while (in_node == out_node) or (node_genes[in_node] == 0 and node_genes[out_node] == 0):
+    while (in_node == out_node) or (node_genes[out_node] == 0):
+        in_node = random.randint(0, len(node_genes) - 1)
         out_node = random.randint(0, len(node_genes)-1)
 
-    while not genome.add_gene(in_node,out_node,innovation_manager):
-      in_node = random.randint(0, len(node_genes)-1)
-      while (in_node == out_node) or (node_genes[in_node] == 0 and node_genes[out_node] == 0):
-        out_node = random.randint(0, len(node_genes)-1)
+    i = 0
+    while (not genome.add_gene(in_node,out_node,innovation_manager)) and i < max(len(connection_genes),10):
+        in_node = random.randint(0, len(node_genes)-1)
+        while (in_node == out_node) or (node_genes[out_node] == 0):
+          in_node = random.randint(0, len(node_genes) - 1)
+          out_node = random.randint(0, len(node_genes) - 1)
+
+        i += 1
+        print("test",in_node,out_node)
+
+    print(genome)
+
 
 '''
   Node Mutation
