@@ -16,8 +16,11 @@ class Gene:
     def set_link(self, o):
         self.output = o
 
-    def set_enabled(self, e):
-        self.enabled = e
+    def disable(self):
+        self.enabled = False
+
+    def enable(self):
+        self.enabled = True
 
     def __str__(self):
         return '[' + str(self.input) + "] -> [" + str(self.output) + ']\ninnovation: ' + str(self.innovation) + '\n'
@@ -66,10 +69,17 @@ class Genome:
         else:
             return False
 
+    def add_node(self,input, output,innovation_manager):
+        n = len(self.node_genes)
+        self.node_genes[n] = 1
+        self.add_gene(input,n,innovation_manager)
+        self.add_gene(n,output,innovation_manager)
+
     def __str__(self):
         ret = ""
         for i in self.connection_genes:
-            ret += str(i)
+            if(i.enabled):
+                ret += str(i)
         return ret
 
 
@@ -120,16 +130,28 @@ def connection_mutation(genome, innovation_manager):
           out_node = random.randint(0, len(node_genes) - 1)
 
         i += 1
-        print("test",in_node,out_node)
+        #print("test",in_node,out_node)
 
     print(genome)
 
 
 '''
-  Node Mutation
+  Node Mutation:
+      1) Choose random connection gene to be split
+      2) Disable connection
 '''
 
 
 def node_mutation(genome,innovation_manager):
     connection_genes = genome.connection_genes
     node_genes = genome.node_genes
+
+    g = connection_genes[random.randint(0,len(connection_genes) - 1)]
+    g.disable()
+
+    in_split = g.input
+    out_split = g.output
+
+    genome.add_node(in_split,out_split,innovation_manager)
+
+    print(genome)

@@ -5,15 +5,5 @@ genome = Genome(3, 1)
 innovationManager = InnovationManager()
 
 connection_mutation(genome,innovationManager)
-
-#print(genome)
-
 connection_mutation(genome,innovationManager)
-
-#print(genome)
-
-for i in range(3):
-    connection_mutation(genome,innovationManager)
-
-
-#print(genome)
+node_mutation(genome,innovationManager)
