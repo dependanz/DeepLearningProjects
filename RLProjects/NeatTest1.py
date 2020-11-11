@@ -1,9 +1,27 @@
 from RLProjects.NEAT import Gene, Genome, InnovationManager, connection_mutation, node_mutation
 
 # before doing the galaga project I wanna understand NEAT
-genome = Genome(3, 1)
+
+x_n = 2
+y_n = 1
+num_genomes = 10
+genomes = list()
+
+for i in range(num_genomes):
+    genomes.append(Genome(x_n,y_n))
+
 innovationManager = InnovationManager()
 
-connection_mutation(genome,innovationManager)
-connection_mutation(genome,innovationManager)
-node_mutation(genome,innovationManager)
+generations = 6
+
+for i in range(generations):
+    for g in genomes:
+        connection_mutation(g, innovationManager)
+        node_mutation(g,innovationManager)
+
+for i in range(len(genomes)):
+    print("Genome " + str(i + 1))
+    print(genomes[i])
+    genomes[i].visualize("Geneome " + str(i+1), 'Genome_' + str(i+1))
+
+#print(genomes[0].node_genes)
