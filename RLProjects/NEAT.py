@@ -1,6 +1,7 @@
 import random
 import math
 from graphviz import Digraph
+import numpy as np
 
 '''
   Connection Gene Class
@@ -13,7 +14,7 @@ class Gene:
         self.output = o
         self.enabled = e
         self.innovation = innov
-        self.weight = random.randint(-100, 100) * 0.01
+        self.weight = random.randint(1, 200) * 0.01
 
     def set_link(self, o):
         self.output = o
@@ -49,6 +50,9 @@ class Node:
 class Genome:
     def __init__(self, n_x, n_y):
 
+        self.n_inputs = n_x
+        self.n_outputs = n_y
+
         # list of genes
         self.connection_genes = list()
 
@@ -70,6 +74,14 @@ class Genome:
     def add_gene(self, g):
         self.connection_genes.append(g)
 
+    def add_gene_innov(self,innov,innovation_manager,enabled=True):
+        g = innovation_manager.innovation_numbers[innov][1]
+        if(enabled):
+            g.enable()
+        else:
+            g.disable()
+        self.connection_genes.append(g)
+
     def scan_fix(self,i):
         for gene in self.connection_genes:
             if(gene.input == i):
@@ -86,12 +98,14 @@ class Genome:
                 self.node_genes[n] = 2
                 if(self.node_genes[output] != 1 and self.node_genes[output] == self.node_genes[n]):
                     self.node_genes[output] += 1
+                    innovation_manager.new_layer(self.node_genes[output])
                     self.scan_fix(output)
         else:
             self.node_genes[n] = self.node_genes[input] + 1
             if(not self.node_genes[output] == 1):
                 if(self.node_genes[output] == self.node_genes[n]):
                     self.node_genes[output] += 1
+                    innovation_manager.new_layer(self.node_genes[output])
         #check if in innovation manager first then do it
 
         c1 = innovation_manager.contains_gene(input, n)
@@ -137,10 +151,72 @@ class Genome:
 
         for g in self.connection_genes:
             if(g.enabled):
-                dot.edge(str(g.input),str(g.output))
+                dot.edge(str(g.input),str(g.output),str(g.weight))
 
         #print(dot.source)
         dot.render('NEAT_Visualizations/' + filepath + '.gv',view=view)
+
+    def required_for_output(self,input_layer,output_layer):
+        '''
+        implementation from neat-python on github: https://github.com/CodeReclaimers/neat-python/blob/master
+        '''
+        required = set(output_layer)
+        s = set(output_layer)
+        while 1:
+            t = set()
+            for g in self.connection_genes:
+                if(not g.enabled): continue
+                if (g.input not in s and g.output in s):
+                    t.add(g.input)
+
+            if not t:
+                break
+            layer_nodes = set(x for x in t if x not in input_layer)
+            if not layer_nodes:
+                break
+
+            required = required.union(layer_nodes)
+            s = s.union(t)
+        return required
+
+    def phenotype(self):
+        input_layer = []
+        output_layer = []
+        for n in self.node_genes.keys():
+            if(self.node_genes[n] == 0):
+                input_layer.append(n)
+            elif(self.node_genes[n] == 1):
+                output_layer.append(n)
+
+        required = self.required_for_output(input_layer,output_layer)
+        #output_layers = np.zeros((len(outputs),1))
+
+        layers = []
+        layers.append(set(input_layer))
+
+        s = set(input_layer)
+        while 1:
+            c = set()
+            for g in self.connection_genes:
+                if(not g.enabled): continue
+                if(g.input in s and g.output not in s):
+                    c.add(g.output)
+
+            t = set()
+            for n in c:
+                if (n in required):
+                    for g in self.connection_genes:
+                        if(not g.enabled or g.input not in s): continue
+                        if(g.output == n):
+                            t.add(n)
+            if not t:
+                break
+
+            layers.append(t)
+            s = s.union(t)
+
+        layers.append(set(output_layer))
+        return layers
 
     def __str__(self):
         ret = ""
@@ -155,6 +231,7 @@ class InnovationManager:
     def __init__(self):
         # tuple of innovation numbers with connection Gene
         self.innovation_numbers = list()
+        self.layers = 2
 
     def check_gene(self, g):
         # valid gene:
@@ -167,6 +244,10 @@ class InnovationManager:
                 if (i[1].input != g.input or i[1].output != g.output):
                     return False
         return True
+
+    def new_layer(self,test):
+        if(test > self.layers):
+            self.layers = test
 
     def contains_gene(self,in_node,out_node):
         for i in self.innovation_numbers:
@@ -231,3 +312,90 @@ def node_mutation(genome,innovation_manager):
     genome.add_node(in_split,out_split,innovation_manager)
 
     #print(genome)
+
+'''
+    Crossover
+'''
+def Crossover(parent1,parent2,innovation_manager,debug=False):
+    print("Crossover:")
+
+    offspring = Genome(parent1.n_inputs,parent1.n_outputs)
+
+    for i in range(len(innovation_manager.innovation_numbers)):
+        p1 = None
+        p2 = None
+        for g in parent1.connection_genes:
+            if(g.innovation != i): continue
+            if(debug):
+                print(f"Parent 1")
+                print(f"\tInnov: {g.innovation}\t[{g.input}] -> [{g.output}]")
+                print(f"\tEnabled: {g.enabled}")
+            p1 = g
+            break
+
+        for g in parent2.connection_genes:
+            if(g.innovation != i): continue
+            if(debug):
+                print(f"Parent 2")
+                print(f"\tInnov: {g.innovation}\t[{g.input}] -> [{g.output}]")
+                print(f"\tEnabled: {g.enabled}")
+            p2 = g
+            break
+
+        if(p1 != None and p2 != None):
+            if(not p1.enabled):
+                offspring.add_gene(p1)
+            elif(not p2.enabled):
+                offspring.add_gene(p2)
+            else:
+                offspring.add_gene_innov(i, innovation_manager)
+        elif(p1 != None):
+            offspring.add_gene(p1)
+        elif (p2 != None):
+            offspring.add_gene(p2)
+
+    if(debug):
+        for g in offspring.connection_genes:
+            print(f"Offspring")
+            print(f"\tInnov: {g.innovation}\t[{g.input}] -> [{g.output}]")
+            print(f"\tEnabled: {g.enabled}")
+
+    # for g in parent1.connection_genes:
+    #     print(f"[{g.input}] -> [{g.output}]")
+    #     print(f"\t{g.innovation}")
+    return offspring
+
+
+def feedforward(x,genome,debug=False):
+    phenotype = genome.phenotype()
+    layers = {}
+    print(phenotype)
+
+    i_count = 0
+    for n in genome.node_genes.keys():
+        if(genome.node_genes[n] == 0):
+            i_count += 1
+
+    if(i_count != len(x)):
+        print("Error: input size doesn't match input layer (expected: " + str(i_count) + ")")
+        return
+
+    for l in phenotype:
+        for n in l:
+            layers[n] = 0.0
+
+    for i in range(i_count):
+        layers[i] = x[i]
+
+    if(debug):
+        print(layers)
+
+    for l in phenotype:
+        for n in l:
+            for g in genome.connection_genes:
+                if(not g.enabled or g.input != n): continue
+                layers[g.output] += g.weight * layers[g.input]
+                if(debug):
+                    print(f"{g.input} -> {g.output}: {layers}")
+
+    print(layers)
