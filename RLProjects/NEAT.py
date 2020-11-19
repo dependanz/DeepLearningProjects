@@ -70,14 +70,23 @@ class Genome:
     def add_gene(self, g):
         self.connection_genes.append(g)
 
+    def scan_fix(self,i):
+        for gene in self.connection_genes:
+            if(gene.input == i):
+                if(self.node_genes[i] < self.node_genes[gene.output]): continue
+                if(self.node_genes[i] == self.node_genes[gene.output]):
+                    self.node_genes[gene.output] += 1
+                    self.scan_fix(gene.output)
+
     def add_node(self,input, output,innovation_manager):
         n = len(self.node_genes)
 
         #set topology
         if(self.node_genes[input] == 0):
                 self.node_genes[n] = 2
-                if(self.node_genes[output] != 1):
+                if(self.node_genes[output] != 1 and self.node_genes[output] == self.node_genes[n]):
                     self.node_genes[output] += 1
+                    self.scan_fix(output)
         else:
             self.node_genes[n] = self.node_genes[input] + 1
             if(not self.node_genes[output] == 1):

@@ -12,7 +12,7 @@ for i in range(num_genomes):
 
 innovationManager = InnovationManager()
 
-generations = 6
+generations = 5
 
 for i in range(generations):
     for g in genomes:
