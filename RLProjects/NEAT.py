@@ -26,7 +26,7 @@ class Gene:
         self.enabled = True
 
     def __str__(self):
-        return '[' + str(self.input) + "] -> [" + str(self.output) + ']\ninnovation: ' + str(self.innovation) + '\n'
+        return '[' + str(self.input) + "] -> [" + str(self.output) + ']\ninnovation: ' + str(self.innovation) + '\nenabled: ' + str(self.enabled) + "\n"
 
 
 '''
@@ -344,15 +344,13 @@ def Crossover(parent1,parent2,innovation_manager,debug=False):
 
         if(p1 != None and p2 != None):
             if(not p1.enabled):
-                offspring.add_gene(p1)
-            elif(not p2.enabled):
-                offspring.add_gene(p2)
+                add_cycle_check(offspring,p1)
             else:
-                offspring.add_gene_innov(i, innovation_manager)
+                add_cycle_check(offspring,p2)
         elif(p1 != None):
-            offspring.add_gene(p1)
+            add_cycle_check(offspring,p1)
         elif (p2 != None):
-            offspring.add_gene(p2)
+            add_cycle_check(offspring,p2)
 
     if(debug):
         for g in offspring.connection_genes:
@@ -365,6 +363,30 @@ def Crossover(parent1,parent2,innovation_manager,debug=False):
     #     print(f"\t{g.innovation}")
     return offspring
 
+def add_cycle_check(genome,gene):
+    if(gene.input == gene.output): return False
+    connections = genome.connection_genes
+    nodes = genome.node_genes
+    makes_cycle = False
+    visited = set()
+    visited.add(gene.output)
+
+    while 1:
+        num_added = 0
+        for g in connections:
+            if(g.input in visited and g.output not in visited):
+                if(g.output == gene.input):
+                    makes_cycle = True
+                    break
+                visited.add(g.output)
+                num_added += 1
+
+        if(makes_cycle or num_added == 0):
+            break
+    if(not makes_cycle):
+        genome.add_gene(gene)
+
+    return True
 
 def feedforward(x,genome,debug=False):
     phenotype = genome.phenotype()
@@ -390,12 +412,24 @@ def feedforward(x,genome,debug=False):
     if(debug):
         print(layers)
 
-    for l in phenotype:
-        for n in l:
+    for l in range(len(phenotype)-1):
+        for n in phenotype[l]:
             for g in genome.connection_genes:
                 if(not g.enabled or g.input != n): continue
-                layers[g.output] += g.weight * layers[g.input]
+                if(g.output in genome.node_genes):
+                    if(genome.node_genes[g.output] == 1): continue
+                if(g.output in layers and g.input in layers):
+                    layers[g.output] += g.weight * layers[g.input]
                 if(debug):
                     print(f"{g.input} -> {g.output}: {layers}")
+
+    #evaluate the output nodes last
+    for n in phenotype[-1]:
+        for g in genome.connection_genes:
+            if(not g.enabled or g.output != n): continue
+            if (g.output in layers and g.input in layers):
+                layers[g.output] += g.weight * layers[g.input]
+            if (debug):
+                print(f"{g.input} -> {g.output}: {layers}")
 
     print(layers)
