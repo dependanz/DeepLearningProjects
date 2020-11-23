@@ -9,15 +9,21 @@ import numpy as np
 
 
 class Gene:
-    def __init__(self, i=0, o=0, e=True, innov=0):
+    def __init__(self, i=0, o=0, e=True, innov=0,weight_range=(-1,1),w=0):
         self.input = i
         self.output = o
         self.enabled = e
         self.innovation = innov
-        self.weight = random.randint(1, 200) * 0.01
+        if(w == 0):
+            self.weight = random.uniform(weight_range[0],weight_range[1])
+        else:
+            self.weight = w
 
     def set_link(self, o):
         self.output = o
+
+    def set_weight(self,w):
+        self.weight = w
 
     def disable(self):
         self.enabled = False
@@ -48,7 +54,7 @@ class Node:
 
 
 class Genome:
-    def __init__(self, n_x, n_y):
+    def __init__(self, n_x, n_y,init_connections="",innovation_manager=None):
 
         self.n_inputs = n_x
         self.n_outputs = n_y
@@ -65,21 +71,52 @@ class Genome:
         for j in range(n_x, n_x + n_y):
             self.node_genes[j] = 1
 
-    def add_gene_io(self, input, output,innovation_manager):
+        if(init_connections == "dense"):
+            for i in range(n_x):
+                for j in range(n_x,n_x+n_y):
+                    self.add_gene_io(i,j,innovation_manager=innovation_manager)
+
+    def connection_exists_innov(self,innov):
+        #print("connection test innov")
+        for g in self.connection_genes:
+            if(innov == g.innovation):
+                return True
+        return False
+
+    def connection_exists_io(self,input,output):
+        #print("connection test")
+        for g in self.connection_genes:
+            if(input == g.input and output == g.output):
+                return True
+        return False
+
+    def add_gene_io(self, input, output,innovation_manager,w=0):
+        if (self.connection_exists_io(input,output)):
+            return
+        if (input == output): return
         i_n = len(innovation_manager.innovation_numbers)
         g = Gene(input, output, True, i_n)
-        innovation_manager.add_gene(g)
+        if(w != 0):
+            g.set_weight(w)
+        if(innovation_manager.contains_gene(g.input,g.output) == -1):
+            innovation_manager.add_gene(g)
         self.connection_genes.append(g)
 
     def add_gene(self, g):
+        if (self.connection_exists_io(g.input,g.output)):
+            return
         self.connection_genes.append(g)
 
     def add_gene_innov(self,innov,innovation_manager,enabled=True):
+        if(self.connection_exists_innov(innov)):
+            return
         g = innovation_manager.innovation_numbers[innov][1]
+        g.visualize("Disable Test Before", "Disable Test Before")
         if(enabled):
             g.enable()
         else:
             g.disable()
+            g.visualize("Disable Test After", "Disable Test After")
         self.connection_genes.append(g)
 
     def scan_fix(self,i):
@@ -90,41 +127,46 @@ class Genome:
                     self.node_genes[gene.output] += 1
                     self.scan_fix(gene.output)
 
-    def add_node(self,input, output,innovation_manager):
+    def add_node(self,input, output,innovation_manager,weight=1):
+        if(input == output): return
+
         n = len(self.node_genes)
 
         #set topology
-        if(self.node_genes[input] == 0):
-                self.node_genes[n] = 2
-                if(self.node_genes[output] != 1 and self.node_genes[output] == self.node_genes[n]):
-                    self.node_genes[output] += 1
-                    innovation_manager.new_layer(self.node_genes[output])
-                    self.scan_fix(output)
+        if(input in self.node_genes and output in self.node_genes):
+            if(self.node_genes[input] == 0):
+                    self.node_genes[n] = 2
+                    if(self.node_genes[output] != 1 and self.node_genes[output] == self.node_genes[n]):
+                        self.node_genes[output] += 1
+                        innovation_manager.new_layer(self.node_genes[output])
+                        #self.scan_fix(output)
+            else:
+                self.node_genes[n] = self.node_genes[input] + 1
+                if(not self.node_genes[output] == 1):
+                    if(self.node_genes[output] == self.node_genes[n]):
+                        self.node_genes[output] += 1
+                        innovation_manager.new_layer(self.node_genes[output])
         else:
-            self.node_genes[n] = self.node_genes[input] + 1
-            if(not self.node_genes[output] == 1):
-                if(self.node_genes[output] == self.node_genes[n]):
-                    self.node_genes[output] += 1
-                    innovation_manager.new_layer(self.node_genes[output])
+            self.node_genes[n] = 2
         #check if in innovation manager first then do it
 
         c1 = innovation_manager.contains_gene(input, n)
         if (c1 != -1):
             #print("innovation number found for: " + str(in_node) + " " + str(out_node) + " -> " + str(c))
-            g = Gene(input, n, True, c1)
+            g = Gene(input, n, True, c1,w=1)
             self.add_gene(g)
         else:
-            #print("no existing innovation number found for: " + str(in_node) + " " + str(out_node) + " adding one")
-            self.add_gene_io(input, n, innovation_manager)
+            #print("no existing innovation number found for: " + str(input) + " " + str(n) + " adding one")
+            self.add_gene_io(input, n, innovation_manager,w=1)
 
         c2 = innovation_manager.contains_gene(n,output)
         if (c2 != -1):
             # print("innovation number found for: " + str(in_node) + " " + str(out_node) + " -> " + str(c))
-            g = Gene(n,output, True, c2)
+            g = Gene(n,output, True, c2,w=weight)
             self.add_gene(g)
         else:
-            # print("no existing innovation number found for: " + str(in_node) + " " + str(out_node) + " adding one")
-            self.add_gene_io(n,output,innovation_manager)
+            #print("no existing innovation number found for: " + str(n) + " " + str(output) + " adding one")
+            self.add_gene_io(n,output,innovation_manager,w=weight)
 
 
     def contains_gene(self,in_node,out_node):
@@ -218,6 +260,12 @@ class Genome:
         layers.append(set(output_layer))
         return layers
 
+    def debug(self):
+        ret = ""
+        for i in self.connection_genes:
+            ret += str(i)
+        return ret
+
     def __str__(self):
         ret = ""
         for i in self.connection_genes:
@@ -300,24 +348,30 @@ def connection_mutation(genome, innovation_manager):
 
 
 def node_mutation(genome,innovation_manager):
+    if(len(genome.connection_genes) == 0): return
     connection_genes = genome.connection_genes
     node_genes = genome.node_genes
 
     g = connection_genes[random.randint(0,len(connection_genes) - 1)]
+    if(not g.enabled): return
+    #genome.visualize("Disable Test Before", "Disable Test Before")
     g.disable()
+    #genome.visualize("Disable Test After", "Disable Test After")
 
     in_split = g.input
     out_split = g.output
 
-    genome.add_node(in_split,out_split,innovation_manager)
+    genome.add_node(in_split,out_split,innovation_manager,weight=g.weight)
 
+    genome.visualize("Disable Test After AFter", "Disable Test After AFter")
     #print(genome)
 
 '''
     Crossover
 '''
 def Crossover(parent1,parent2,innovation_manager,debug=False):
-    print("Crossover:")
+    if(debug):
+        print("Crossover:")
 
     offspring = Genome(parent1.n_inputs,parent1.n_outputs)
 
@@ -363,6 +417,11 @@ def Crossover(parent1,parent2,innovation_manager,debug=False):
     #     print(f"\t{g.innovation}")
     return offspring
 
+def weight_shift(genome,prob=0.15,shift_radius=0.01):
+    for connection in genome.connection_genes:
+        if(random.random() <= 0.15):
+            connection.weight += random.uniform(-shift_radius,shift_radius)
+
 def add_cycle_check(genome,gene):
     if(gene.input == gene.output): return False
     connections = genome.connection_genes
@@ -372,6 +431,7 @@ def add_cycle_check(genome,gene):
     visited.add(gene.output)
 
     while 1:
+        #print("add_cycle_check loop")
         num_added = 0
         for g in connections:
             if(g.input in visited and g.output not in visited):
@@ -391,12 +451,17 @@ def add_cycle_check(genome,gene):
 def feedforward(x,genome,debug=False):
     phenotype = genome.phenotype()
     layers = {}
-    print(phenotype)
+    if(debug):
+        print("Phenotype: ")
+        print(phenotype)
 
     i_count = 0
+    o_count = 0
     for n in genome.node_genes.keys():
         if(genome.node_genes[n] == 0):
             i_count += 1
+        if(genome.node_genes[n] == 1):
+            o_count += 1
 
     if(i_count != len(x)):
         print("Error: input size doesn't match input layer (expected: " + str(i_count) + ")")
@@ -432,4 +497,10 @@ def feedforward(x,genome,debug=False):
             if (debug):
                 print(f"{g.input} -> {g.output}: {layers}")
 
-    print(layers)
+    if(debug):
+        print(layers)
+    outputs = []
+
+    for i in range(i_count,i_count+o_count):
+        outputs.append(layers[i])
+    return outputs
