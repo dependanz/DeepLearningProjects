@@ -2,6 +2,7 @@ import random
 import math
 from graphviz import Digraph
 import numpy as np
+import string
 
 '''
   Connection Gene Class
@@ -31,6 +32,9 @@ class Gene:
     def enable(self):
         self.enabled = True
 
+    def is_enabled(self):
+        return self.enabled
+
     def __str__(self):
         return '[' + str(self.input) + "] -> [" + str(self.output) + ']\ninnovation: ' + str(self.innovation) + '\nenabled: ' + str(self.enabled) + "\n"
 
@@ -54,7 +58,7 @@ class Node:
 
 
 class Genome:
-    def __init__(self, n_x, n_y,init_connections="",innovation_manager=None):
+    def __init__(self, n_x, n_y,init_connections="",innovation_manager=None,parents=[]):
 
         self.n_inputs = n_x
         self.n_outputs = n_y
@@ -65,16 +69,25 @@ class Genome:
         # dictionary of nodes in our network (phenotype) (int node, int layer)
         self.node_genes = {}
 
+        self.id = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(6))
+
+        self.parents = parents
+
         for i in range(n_x):
             self.node_genes[i] = 0
 
         for j in range(n_x, n_x + n_y):
             self.node_genes[j] = 1
 
-        if(init_connections == "dense"):
+        if (init_connections == "dense"):
+            inno = 0
             for i in range(n_x):
-                for j in range(n_x,n_x+n_y):
-                    self.add_gene_io(i,j,innovation_manager=innovation_manager)
+                for j in range(n_x, n_x + n_y):
+                    g = Gene(i, j, True, inno)
+                    inno += 1
+                    if (innovation_manager.contains_gene(i, j) == -1):
+                        innovation_manager.add_gene(g)
+                    self.connection_genes.append(g)
 
     def connection_exists_innov(self,innov):
         #print("connection test innov")
@@ -170,14 +183,21 @@ class Genome:
 
 
     def contains_gene(self,in_node,out_node):
-        for i in self.connection_genes:
-            if(in_node == i.input and out_node == i.output):
-                return True
-        return False
+        for i in range(len(self.connection_genes)):
+            if(in_node == self.connection_genes[i].input and out_node == self.connection_genes[i].output):
+                return True, i
+        return False, -1
 
-    def visualize(self,title,filepath,view=False):
+    def visualize(self,title,filepath,view=False,fitness=0.0):
         dot = Digraph(comment=title)
         dot.graph_attr['rankdir'] = 'LR'
+
+        name = self.id
+
+        if(len(self.parents) > 0):
+            name += f" offspring of {self.parents[0]} and {self.parents[1]}"
+
+        dot.node(f"fitness: {fitness} {name}")
         for node in self.node_genes:
             c = 'black'
             text = " layer " + str(self.node_genes[node])
@@ -303,28 +323,48 @@ class InnovationManager:
                 return i[0]
         return -1
 
-    def add_gene(self,g):
-        self.innovation_numbers.append((len(self.innovation_numbers),g))
+    def add_gene(self,g,num=-1):
+        if (num != -1):
+            self.innovation_numbers.append((num, g))
+        else:
+            self.innovation_numbers.append((len(self.innovation_numbers), g))
 
 '''
   Connection Mutation
 '''
 def connection_mutation(genome, innovation_manager):
+    disabled_genes = []
+
+    # print(f"connection mutate -> id: {genome.id}")
+
+    for g in genome.connection_genes:
+        if(not g.is_enabled()):
+            disabled_genes.append((g.input,g.output))
+
+
     connection_genes = genome.connection_genes
     node_genes = genome.node_genes
     in_node = random.randint(0, len(node_genes)-1)
     out_node = random.randint(0, len(node_genes)-1)
 
-    while (in_node == out_node) or (node_genes[out_node] == 0) or (node_genes[in_node] == 1) or (node_genes[in_node] >= node_genes[out_node]):
+    #contains_gene, gene_idx = genome.contains_gene(in_node, out_node)
+
+    while (in_node == out_node) or (node_genes[out_node] == 0) or (node_genes[in_node] == 1):
+        # if(contains_gene):
+        #     if(not genome.connection_genes[gene_idx].is_enabled()):
+        #         break
         in_node = random.randint(0, len(node_genes) - 1)
-        out_node = random.randint(0, len(node_genes)-1)
+        out_node = random.randint(0, len(node_genes) - 1)
+        # contains_gene, gene_idx = genome.contains_gene(in_node, out_node)
 
     # if connection exists for the genome ignore connection mutation
     # if connection doesn't exist look for it in innovation_manager
     #   if it is in innovation_manager then use that connection
     #   else assign the connection gene an innovation number and add it to the innovation_manager
 
-    if(not genome.contains_gene(in_node,out_node)):
+    contains_gene,gene_idx = genome.contains_gene(in_node,out_node)
+
+    if(not contains_gene):
         #print("doesn't contain: " + str(in_node) + " " + str(out_node) + " look in innovation manager")
         c = innovation_manager.contains_gene(in_node,out_node)
         if(c != -1):
@@ -334,9 +374,12 @@ def connection_mutation(genome, innovation_manager):
         else:
             #print("no existing innovation number found for: " + str(in_node) + " " + str(out_node) + " adding one")
             genome.add_gene_io(in_node,out_node,innovation_manager)
-    #else:
+    else:
         #print("ignoring connection: " + str(in_node) + " " + str(out_node))
-
+        if(genome.connection_genes[gene_idx].is_enabled()):
+            genome.connection_genes[gene_idx].disable()
+        else:
+            genome.connection_genes[gene_idx].enable()
     #print(genome)
 
 
@@ -351,6 +394,8 @@ def node_mutation(genome,innovation_manager):
     if(len(genome.connection_genes) == 0): return
     connection_genes = genome.connection_genes
     node_genes = genome.node_genes
+
+    # print(f"node mutate -> id: {genome.id}")
 
     g = connection_genes[random.randint(0,len(connection_genes) - 1)]
     if(not g.enabled): return
@@ -369,42 +414,60 @@ def node_mutation(genome,innovation_manager):
 '''
     Crossover
 '''
-def Crossover(parent1,parent2,innovation_manager,debug=False):
+def Crossover(parent1,parent2,innovation_manager,prob=0.5,debug=False):
     if(debug):
         print("Crossover:")
 
-    offspring = Genome(parent1.n_inputs,parent1.n_outputs)
+    offspring = Genome(parent1[0].n_inputs,parent1[0].n_outputs,parents=[parent1[0].id,parent2[0].id])
 
-    for i in range(len(innovation_manager.innovation_numbers)):
-        p1 = None
-        p2 = None
-        for g in parent1.connection_genes:
-            if(g.innovation != i): continue
-            if(debug):
-                print(f"Parent 1")
-                print(f"\tInnov: {g.innovation}\t[{g.input}] -> [{g.output}]")
-                print(f"\tEnabled: {g.enabled}")
-            p1 = g
-            break
+    genome1 = parent1[0]
+    genome2 = parent2[0]
+    fitness1 = parent1[1]
+    fitness2 = parent2[1]
 
-        for g in parent2.connection_genes:
-            if(g.innovation != i): continue
-            if(debug):
-                print(f"Parent 2")
-                print(f"\tInnov: {g.innovation}\t[{g.input}] -> [{g.output}]")
-                print(f"\tEnabled: {g.enabled}")
-            p2 = g
-            break
+    i = 0
+    j = 0
 
-        if(p1 != None and p2 != None):
-            if(not p1.enabled):
-                add_cycle_check(offspring,p1)
+    n1 = len(genome1.connection_genes)
+    n2 = len(genome2.connection_genes)
+
+    g1_innov = 0
+    g2_innov = 0
+
+    for g1 in range(n1):
+        if (genome1.connection_genes[g1].innovation > g1_innov):
+            g1_innov = genome1.connection_genes[g1].innovation
+
+    for g2 in range(n2):
+        if (genome2.connection_genes[g2].innovation > g2_innov):
+            g2_innov = genome2.connection_genes[g2].innovation
+
+    while (i < n1 and j < n2):
+        if (i >= n1 and j < n2):
+            if(fitness1 > fitness2): break
+            add_cycle_check(offspring, genome1.connection_genes[j])
+            j += 1
+            continue
+        elif (i < n1 and j >= n2):
+            if (fitness1 < fitness2): break
+            add_cycle_check(offspring, genome1.connection_genes[i])
+            i += 1
+            continue
+
+        if (genome1.connection_genes[i].innovation == genome2.connection_genes[j].innovation):
+            if (random.random() < prob):
+                add_cycle_check(offspring, genome1.connection_genes[i])
             else:
-                add_cycle_check(offspring,p2)
-        elif(p1 != None):
-            add_cycle_check(offspring,p1)
-        elif (p2 != None):
-            add_cycle_check(offspring,p2)
+                add_cycle_check(offspring, genome2.connection_genes[j])
+            i += 1
+            j += 1
+        else:
+            if (genome1.connection_genes[i].innovation > genome2.connection_genes[j].innovation):
+                add_cycle_check(offspring, genome2.connection_genes[j])
+                j += 1
+            elif (genome1.connection_genes[i].innovation < genome2.connection_genes[j].innovation):
+                add_cycle_check(offspring, genome1.connection_genes[i])
+                i += 1
 
     if(debug):
         for g in offspring.connection_genes:
@@ -424,6 +487,9 @@ def weight_shift(genome,prob=0.15,shift_radius=0.01):
 
 def add_cycle_check(genome,gene):
     if(gene.input == gene.output): return False
+
+    gene_cpy = Gene(gene.input,gene.output,gene.enabled,gene.innovation,w=gene.weight)
+
     connections = genome.connection_genes
     nodes = genome.node_genes
     makes_cycle = False
@@ -444,7 +510,7 @@ def add_cycle_check(genome,gene):
         if(makes_cycle or num_added == 0):
             break
     if(not makes_cycle):
-        genome.add_gene(gene)
+        genome.add_gene(gene_cpy)
 
     return True
 
